@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>SSM Telemetry Dashboard v2</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --absent:    #e53e3e;
+    --emerging:  #dd6b20;
+    --proficient:#2f855a;
+    --exemplary: #2b6cb0;
+    --na:        #718096;
+    --ai-high:   #6b46c1;
+    --ai-mod:    #9f7aea;
+    --ai-low:    #d6bcfa;
+    --ai-min:    #f0e6ff;
+    --bg:        #f7f8fa;
+    --card:      #ffffff;
+    --border:    #e2e8f0;
+    --text:      #1a202c;
+    --muted:     #718096;
+    --accent:    #3182ce;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         background: var(--bg); color: var(--text); font-size: 14px; }
+
+  /* ── header ── */
+  .header { background: #1a202c; color: #fff; padding: 18px 28px;
+            display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .header p  { font-size: 12px; color: #a0aec0; margin-top: 2px; }
+  .badge { background: #2d3748; color: #90cdf4; padding: 3px 10px;
+           border-radius: 12px; font-size: 11px; font-weight: 600; }
+
+  /* ── stat bar ── */
+  .statbar { display: flex; gap: 0; border-bottom: 1px solid var(--border);
+             background: var(--card); }
+  .stat { flex: 1; padding: 14px 20px; border-right: 1px solid var(--border);
+          text-align: center; }
+  .stat:last-child { border-right: none; }
+  .stat-val { font-size: 24px; font-weight: 700; }
+  .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .5px; }
+  .s3-val { color: var(--emerging); }
+  .s6-val { color: var(--exemplary); }
+  .ai-val { color: var(--ai-high); }
+
+  /* ── tabs ── */
+  .tabs { display: flex; background: var(--card);
+          border-bottom: 2px solid var(--border); padding: 0 24px; }
+  .tab { padding: 12px 20px; cursor: pointer; font-weight: 500;
+         border-bottom: 3px solid transparent; margin-bottom: -2px;
+         color: var(--muted); transition: all .15s; font-size: 13px; }
+  .tab:hover { color: var(--accent); }
+  .tab.active { color: var(--accent); border-color: var(--accent); }
+
+  /* ── panels ── */
+  .panel { display: none; padding: 24px; }
+  .panel.active { display: block; }
+
+  /* ── cards ── */
+  .card { background: var(--card); border: 1px solid var(--border);
+          border-radius: 8px; padding: 20px; }
+
+  /* ── class heatmap ── */
+  .heatmap-wrap { overflow-x: auto; }
+  table.heatmap { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13px; }
+  table.heatmap th { background: #f1f5f9; text-align: left; padding: 8px 12px;
+                     font-weight: 600; font-size: 11px; text-transform: uppercase;
+                     letter-spacing: .5px; color: var(--muted);
+                     border-bottom: 2px solid var(--border); cursor: pointer; }
+  table.heatmap th:hover { color: var(--accent); }
+  table.heatmap td { padding: 7px 12px; border-bottom: 1px solid var(--border); }
+  table.heatmap tr:hover td { background: #f8fafc; }
+  .score-cell { display: inline-flex; align-items: center; justify-content: center;
+                width: 36px; height: 26px; border-radius: 5px;
+                font-weight: 700; font-size: 13px; color: #fff; }
+  .score-absent    { background: var(--absent); }
+  .score-emerging  { background: var(--emerging); }
+  .score-proficient{ background: var(--proficient); }
+  .score-exemplary { background: var(--exemplary); }
+  .score-na        { background: var(--na); font-size: 10px; }
+  .ai-badge { display: inline-block; padding: 2px 8px; border-radius: 10px;
+              font-size: 11px; font-weight: 600; color: #fff; }
+  .ai-high { background: var(--ai-high); }
+  .ai-moderate { background: var(--ai-mod); color: #fff; }
+  .ai-low  { background: var(--ai-low); color: #6b46c1; }
+  .ai-minimal { background: #e9d8fd; color: #553c9a; }
+  .commits-bar { display: flex; align-items: center; gap: 6px; }
+  .bar-bg { height: 6px; border-radius: 3px; background: #e2e8f0; flex: 1; max-width: 80px; }
+  .bar-fg { height: 100%; border-radius: 3px; background: var(--accent); }
+  .sort-arrow { font-size: 10px; margin-left: 3px; }
+
+  /* ── legend ── */
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+            font-size: 12px; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 3px; }
+
+  /* ── student detail ── */
+  .detail-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+  .detail-selector { margin-bottom: 20px; }
+  .detail-selector select { width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+                             border-radius: 6px; font-size: 14px; background: var(--card);
+                             cursor: pointer; }
+  .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+                margin-bottom: 20px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border);
+               border-radius: 8px; padding: 14px 16px; }
+  .stat-card .val { font-size: 22px; font-weight: 700; }
+  .stat-card .lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .reasoning { background: #f8fafc; border-left: 3px solid var(--accent);
+               padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 12.5px;
+               color: #4a5568; margin-top: 8px; line-height: 1.5; }
+  .signal-table { width: 100%; font-size: 12.5px; border-collapse: collapse; }
+  .signal-table th { padding: 6px 10px; text-align: left; font-weight: 600;
+                     font-size: 11px; text-transform: uppercase; letter-spacing: .4px;
+                     color: var(--muted); border-bottom: 1px solid var(--border); }
+  .signal-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; }
+  .pip { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+         margin-right: 2px; }
+  .pip-on  { background: var(--accent); }
+  .pip-off { background: #e2e8f0; }
+  .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: .6px; color: var(--muted); margin: 14px 0 6px; }
+  .chart-wrap { position: relative; height: 240px; }
+
+  /* ── AI scatter ── */
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .chart-box { background: var(--card); border: 1px solid var(--border);
+               border-radius: 8px; padding: 16px; }
+  .chart-box h3 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+  .chart-box .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .chart-h280 { position: relative; height: 280px; }
+  .insight-box { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 8px;
+                 padding: 14px 18px; font-size: 13px; line-height: 1.6; color: #2c5282; }
+  .insight-box strong { font-weight: 700; }
+
+  /* ── radar labels ── */
+  .radar-section { display: flex; flex-direction: column; }
+
+  @media (max-width: 768px) {
+    .detail-grid { grid-template-columns: 1fr; }
+    .stat-cards  { grid-template-columns: repeat(2, 1fr); }
+    .chart-row   { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>SSM Supervision Telemetry Dashboard</h1>
+    <p>Supervision Skill Model · CSDS 393/493 · Spring 2026 · Case Western Reserve University</p>
+  </div>
+  <span class="badge">Research Preview</span>
+</div>
+
+<div class="statbar" id="statbar"><!-- filled by JS --></div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview',this)">Class Overview</div>
+  <div class="tab" onclick="switchTab('student',this)">Student Detail</div>
+  <div class="tab" onclick="switchTab('adoption',this)">AI Adoption</div>
+</div>
+
+<!-- ═══════════════════ TAB 1: OVERVIEW ═══════════════════ -->
+<div class="panel active" id="panel-overview">
+  <div class="legend">
+    <strong style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Score:</strong>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--exemplary)"></div>Exemplary (3)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--proficient)"></div>Proficient (2)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--emerging)"></div>Emerging (1)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--absent)"></div>Absent (0)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--na)"></div>N/A (pending LLM)</div>
+    <span style="margin-left:8px;color:var(--border)">│</span>
+    <strong style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-left:8px">AI:</strong>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--ai-high)"></div>High</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--ai-mod)"></div>Moderate</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--ai-low)"></div>Low</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e9d8fd"></div>Minimal</div>
+  </div>
+  <div class="heatmap-wrap card">
+    <table class="heatmap" id="htable">
+      <thead>
+        <tr>
+          <th onclick="sortBy('id')">Repository <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('s3')" style="text-align:center">S3 Verify <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('s6')" style="text-align:center">S6 Orchestrate <span class="sort-arrow">↕</span></th>
+          <th onclick="sortBy('commits')">Commits <span class="sort-arrow">↕</span></th>
+          <th>Tests / Impl</th>
+          <th onclick="sortBy('ai_pct')">AI Evidence <span class="sort-arrow">↕</span></th>
+          <th style="text-align:center">CI</th>
+        </tr>
+      </thead>
+      <tbody id="htbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════ TAB 2: STUDENT DETAIL ═══════════════════ -->
+<div class="panel" id="panel-student">
+  <div class="detail-selector">
+    <select id="repo-select" onchange="renderStudent()">
+      <option value="">— select a repository —</option>
+    </select>
+  </div>
+  <div id="student-content" style="display:none">
+    <div class="stat-cards" id="student-cards"></div>
+    <div class="detail-grid">
+      <div class="radar-section">
+        <div class="card">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Competency Profile</div>
+          <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">
+            S1/S2/S4/S5 scored to 0 pending LLM integration — shown as dashed
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <div class="section-title">S3 Verify — Analysis</div>
+          <div class="reasoning" id="s3-reasoning"></div>
+          <div class="section-title" style="margin-top:16px">S6 Orchestrate — Analysis</div>
+          <div class="reasoning" id="s6-reasoning"></div>
+          <div class="section-title" style="margin-top:16px">AI Adoption Signals</div>
+          <table class="signal-table">
+            <thead><tr>
+              <th>Signal</th><th>Score</th><th>Category</th>
+            </tr></thead>
+            <tbody id="signal-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="student-empty" style="text-align:center;padding:60px;color:var(--muted);font-size:14px">
+    Select a repository from the dropdown to see its supervision profile.
+  </div>
+</div>
+
+<!-- ═══════════════════ TAB 3: AI ADOPTION ═══════════════════ -->
+<div class="panel" id="panel-adoption">
+  <div class="insight-box" style="margin-bottom:20px">
+    <strong>Key finding:</strong> 14/18 (78%) repositories show at least one explicit AI signal.
+    AI adoption is the norm, not the exception — but it does <em>not</em> predict verification quality.
+    S3 mean for High/Moderate AI groups (1.92/3) is only slightly above Low/Minimal (1.20/3),
+    with <strong>both groups below the Proficient threshold</strong>. S6 is uniformly high across all adoption levels.
+  </div>
+  <div class="chart-row">
+    <div class="chart-box">
+      <h3>AI Adoption vs. S3 Verify Score</h3>
+      <div class="sub">Point color = S6 score · dashed = Proficient threshold</div>
+      <div class="chart-h280" style="margin-top:10px"><canvas id="scatterChart"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h3>AI Evidence Level Distribution</h3>
+      <div class="sub">N = 18 repositories</div>
+      <div class="chart-h280" style="margin-top:10px"><canvas id="levelChart"></canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <table class="heatmap" id="ai-table">
+      <thead><tr>
+        <th onclick="sortAI('id')">Repository</th>
+        <th onclick="sortAI('ai_pct')">AI Signal Strength ↕</th>
+        <th>AI Evidence Level</th>
+        <th>Explicit Signals</th>
+        <th style="text-align:center">S3 Verify</th>
+        <th style="text-align:center">S6 Orchestrate</th>
+      </tr></thead>
+      <tbody id="ai-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+// ─── embedded data ────────────────────────────────────────────────────────────
+const DATA = [{"id":"arguably","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":149,"impl_files":55,"test_files":47,"has_ci":true,"ai_level":"High","ai_pct":42.6,"ai_explicit":["e1","e2","e4"],"s3_reasoning":"Test-to-implementation line ratio: 1.21. Test-first pattern detected for 47% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"149 commits over 2139.1h. Commits distributed — 7% in last 24h. Moderate churn ratio 0.17. 4 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":1.213,"s6_end_loaded":0.074,"s6_branches":4,"s6_has_prs":true},{"id":"campus-stay","s1":-1,"s2":-1,"s3":1,"s4":-1,"s5":-1,"s6":3,"commits":140,"impl_files":31,"test_files":7,"has_ci":false,"ai_level":"Moderate","ai_pct":22.7,"ai_explicit":["e2"],"s3_reasoning":"Test-to-implementation line ratio: 0.11. No test-first pattern detected (tests committed after implementation). Tests exist but minimal or entirely after-the-fact → Emerging.","s6_reasoning":"140 commits over 1870.9h. Commits distributed — 6% in last 24h. Moderate churn ratio 0.09. 2 branches used. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.112,"s6_end_loaded":0.064,"s6_branches":2,"s6_has_prs":false},{"id":"collabo","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":246,"impl_files":56,"test_files":6,"has_ci":false,"ai_level":"Moderate","ai_pct":31.9,"ai_explicit":["e1","e2"],"s3_reasoning":"Test-to-implementation line ratio: 0.51. No test-first pattern detected (tests committed after implementation). Tests present and reasonably proportionate → Proficient.","s6_reasoning":"246 commits over 2352.3h. Commits distributed — 2% in last 24h. Moderate churn ratio 0.27. 25 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.507,"s6_end_loaded":0.024,"s6_branches":25,"s6_has_prs":true},{"id":"csds393-devak","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":81,"impl_files":82,"test_files":16,"has_ci":false,"ai_level":"Moderate","ai_pct":29.8,"ai_explicit":["e1"],"s3_reasoning":"Test-to-implementation line ratio: 0.62. Test-first pattern detected for 11% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"81 commits over 2045.6h. Commits distributed — 4% in last 24h. Moderate churn ratio 0.14. 6 branches used. PR-based merge workflow detected. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.619,"s6_end_loaded":0.037,"s6_branches":6,"s6_has_prs":true},{"id":"csds393-hrishnugg","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":146,"impl_files":128,"test_files":15,"has_ci":true,"ai_level":"High","ai_pct":47.5,"ai_explicit":["e1","e2","e3"],"s3_reasoning":"Test-to-implementation line ratio: 0.10. Test-first pattern detected for 40% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"146 commits over 2402.0h. Commits distributed — 1% in last 24h. Moderate churn ratio 0.21. 14 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.1,"s6_end_loaded":0.007,"s6_branches":14,"s6_has_prs":true},{"id":"csds393-project","s1":-1,"s2":-1,"s3":0,"s4":-1,"s5":-1,"s6":3,"commits":76,"impl_files":7,"test_files":0,"has_ci":false,"ai_level":"Low","ai_pct":9.9,"ai_explicit":["e2"],"s3_reasoning":"No test files found in the repository.","s6_reasoning":"76 commits over 2228.5h. Commits distributed — 38% in last 24h. Moderate churn ratio 0.01. 17 branches used. PR-based merge workflow detected. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.0,"s6_end_loaded":0.382,"s6_branches":17,"s6_has_prs":true},{"id":"csds393-rhyderswen","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":180,"impl_files":10,"test_files":2,"has_ci":true,"ai_level":"Moderate","ai_pct":26.2,"ai_explicit":["e2","e5"],"s3_reasoning":"Test-to-implementation line ratio: 0.67. No test-first pattern detected (tests committed after implementation). Tests present and reasonably proportionate → Proficient.","s6_reasoning":"180 commits over 2550.8h. Commits distributed — 14% in last 24h. Moderate churn ratio 0.83. 23 branches used. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.672,"s6_end_loaded":0.144,"s6_branches":23,"s6_has_prs":false},{"id":"dispatch","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":184,"impl_files":53,"test_files":25,"has_ci":true,"ai_level":"High","ai_pct":42.6,"ai_explicit":["e1","e2"],"s3_reasoning":"Test-to-implementation line ratio: 0.72. Test-first pattern detected for 33% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"184 commits over 2393.6h. Commits distributed — 2% in last 24h. Moderate churn ratio 0.01. 5 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.721,"s6_end_loaded":0.016,"s6_branches":5,"s6_has_prs":true},{"id":"get-space","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":2,"commits":140,"impl_files":31,"test_files":13,"has_ci":false,"ai_level":"Minimal","ai_pct":7.8,"ai_explicit":[],"s3_reasoning":"Test-to-implementation line ratio: 0.66. Test-first pattern detected for 10% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"140 commits over 2050.3h. Commits distributed — 4% in last 24h. Moderate churn ratio 1.50. 8 branches used. Revert commits present (evidence of recovery decisions). Some workflow discipline present → Proficient.","s3_test_ratio":0.664,"s6_end_loaded":0.036,"s6_branches":8,"s6_has_prs":false},{"id":"group17-rest-api","s1":-1,"s2":-1,"s3":0,"s4":-1,"s5":-1,"s6":3,"commits":198,"impl_files":20,"test_files":0,"has_ci":true,"ai_level":"Moderate","ai_pct":22.7,"ai_explicit":["e1","e2"],"s3_reasoning":"No test files found in the repository.","s6_reasoning":"198 commits over 3297.1h. Commits distributed — 1% in last 24h. Moderate churn ratio 0.20. 12 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.0,"s6_end_loaded":0.005,"s6_branches":12,"s6_has_prs":true},{"id":"group6","s1":-1,"s2":-1,"s3":1,"s4":-1,"s5":-1,"s6":2,"commits":217,"impl_files":7,"test_files":8,"has_ci":false,"ai_level":"Moderate","ai_pct":27.0,"ai_explicit":["e5"],"s3_reasoning":"Test-to-implementation line ratio: 0.04. No test-first pattern detected (tests committed after implementation). Tests exist but minimal or entirely after-the-fact → Emerging.","s6_reasoning":"217 commits over 2019.4h. Commits distributed — 6% in last 24h. Moderate churn ratio 0.80. Some workflow discipline present → Proficient.","s3_test_ratio":0.04,"s6_end_loaded":0.055,"s6_branches":1,"s6_has_prs":false},{"id":"packed","s1":-1,"s2":-1,"s3":0,"s4":-1,"s5":-1,"s6":3,"commits":126,"impl_files":13,"test_files":0,"has_ci":false,"ai_level":"Low","ai_pct":8.5,"ai_explicit":[],"s3_reasoning":"No test files found in the repository.","s6_reasoning":"126 commits over 2191.3h. Commits distributed — 10% in last 24h. Moderate churn ratio 0.53. 18 branches used. PR-based merge workflow detected. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.0,"s6_end_loaded":0.103,"s6_branches":18,"s6_has_prs":true},{"id":"party-server","s1":-1,"s2":-1,"s3":3,"s4":-1,"s5":-1,"s6":3,"commits":116,"impl_files":25,"test_files":6,"has_ci":false,"ai_level":"Moderate","ai_pct":30.5,"ai_explicit":["e1","e2"],"s3_reasoning":"Test-to-implementation line ratio: 0.54. Test-first pattern detected for 50% of matched feature pairs. Consistent test-first pattern with adequate coverage → Exemplary.","s6_reasoning":"116 commits over 2150.4h. Commits distributed — 1% in last 24h. Moderate churn ratio 0.11. 3 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.54,"s6_end_loaded":0.009,"s6_branches":3,"s6_has_prs":true},{"id":"rate-my-housing","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":212,"impl_files":5,"test_files":2,"has_ci":false,"ai_level":"Moderate","ai_pct":33.3,"ai_explicit":["e2","e5"],"s3_reasoning":"Test-to-implementation line ratio: 0.19. No test-first pattern detected (tests committed after implementation). Tests present and reasonably proportionate → Proficient.","s6_reasoning":"212 commits over 2064.5h. Commits distributed — 15% in last 24h. Moderate churn ratio 0.22. 10 branches used. PR-based merge workflow detected. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.191,"s6_end_loaded":0.146,"s6_branches":10,"s6_has_prs":true},{"id":"six-degrees","s1":-1,"s2":-1,"s3":3,"s4":-1,"s5":-1,"s6":3,"commits":536,"impl_files":34,"test_files":36,"has_ci":false,"ai_level":"Moderate","ai_pct":24.8,"ai_explicit":["e1"],"s3_reasoning":"Test-to-implementation line ratio: 2.37. Test-first pattern detected for 59% of matched feature pairs. Consistent test-first pattern with adequate coverage → Exemplary.","s6_reasoning":"536 commits over 2095.6h. Commits distributed — 0% in last 24h. Moderate churn ratio 0.53. 15 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":2.366,"s6_end_loaded":0.002,"s6_branches":15,"s6_has_prs":true},{"id":"skillshare","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":44,"impl_files":31,"test_files":21,"has_ci":false,"ai_level":"Low","ai_pct":15.6,"ai_explicit":[],"s3_reasoning":"Test-to-implementation line ratio: 2.27. Test-first pattern detected for 7% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"44 commits over 1939.9h. Commits distributed — 11% in last 24h. Moderate churn ratio 0.08. 2 branches used. PR-based merge workflow detected. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":2.273,"s6_end_loaded":0.114,"s6_branches":2,"s6_has_prs":true},{"id":"study-sync","s1":-1,"s2":-1,"s3":2,"s4":-1,"s5":-1,"s6":3,"commits":64,"impl_files":22,"test_files":9,"has_ci":false,"ai_level":"Low","ai_pct":13.5,"ai_explicit":[],"s3_reasoning":"Test-to-implementation line ratio: 0.14. Test-first pattern detected for 100% of matched feature pairs. Tests present and reasonably proportionate → Proficient.","s6_reasoning":"64 commits over 2093.7h. Commits distributed — 19% in last 24h. Moderate churn ratio 0.95. 16 branches used. PR-based merge workflow detected. Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.142,"s6_end_loaded":0.188,"s6_branches":16,"s6_has_prs":true},{"id":"web-to-table","s1":-1,"s2":-1,"s3":3,"s4":-1,"s5":-1,"s6":3,"commits":280,"impl_files":6,"test_files":12,"has_ci":false,"ai_level":"Moderate","ai_pct":21.3,"ai_explicit":["e1","e2"],"s3_reasoning":"Test-to-implementation line ratio: 0.76. Test-first pattern detected for 100% of matched feature pairs. Consistent test-first pattern with adequate coverage → Exemplary.","s6_reasoning":"280 commits over 2225.1h. Commits distributed — 2% in last 24h. Moderate churn ratio 1.29. 5 branches used. PR-based merge workflow detected. Revert commits present (evidence of recovery decisions). Well-distributed commits, structured branching, manageable churn → Exemplary.","s3_test_ratio":0.763,"s6_end_loaded":0.025,"s6_branches":5,"s6_has_prs":true}];
+
+// ─── constants ────────────────────────────────────────────────────────────────
+const SCORE_COLOR = {'-1':'var(--na)', '0':'var(--absent)', '1':'var(--emerging)', '2':'var(--proficient)', '3':'var(--exemplary)'};
+const SCORE_LABEL = {'-1':'N/A', '0':'Absent', '1':'Emerging', '2':'Proficient', '3':'Exemplary'};
+const AI_CLASS   = {'High':'ai-high','Moderate':'ai-moderate','Low':'ai-low','Minimal':'ai-minimal'};
+const SIGNAL_NAMES = {
+  e1:'Commit AI keywords', e2:'README mention', e3:'AI config file',
+  e4:'Co-author bot', e5:'Disclosure section',
+  b1:'Commit size anomaly', b2:'Comment density', b3:'Docstring coverage',
+  b4:'Type annotation density', b5:'TODO stub density', b6:'Boilerplate phrases',
+  t1:'Off-hours commits', t2:'Burst commit windows'
+};
+const maxCommits = Math.max(...DATA.map(d=>d.commits));
+
+let sortField = 's6', sortDir = 1;
+let aiSortField = 'ai_pct', aiSortDir = 1;
+let radarChart = null, scatterChart = null, levelChart = null;
+
+// ─── stat bar ─────────────────────────────────────────────────────────────────
+function buildStatBar() {
+  const s3vals = DATA.map(d=>d.s3).filter(v=>v>=0);
+  const s6vals = DATA.map(d=>d.s6).filter(v=>v>=0);
+  const s3mean = (s3vals.reduce((a,b)=>a+b,0)/s3vals.length).toFixed(2);
+  const s6mean = (s6vals.reduce((a,b)=>a+b,0)/s6vals.length).toFixed(2);
+  const aiPct  = Math.round(DATA.filter(d=>d.ai_explicit.length>0).length / DATA.length * 100);
+  document.getElementById('statbar').innerHTML = `
+    <div class="stat"><div class="stat-val">${DATA.length}</div><div class="stat-lbl">Repositories</div></div>
+    <div class="stat"><div class="stat-val s3-val">${s3mean}/3</div><div class="stat-lbl">S3 Verify (mean)</div></div>
+    <div class="stat"><div class="stat-val s6-val">${s6mean}/3</div><div class="stat-lbl">S6 Orchestrate (mean)</div></div>
+    <div class="stat"><div class="stat-val ai-val">${aiPct}%</div><div class="stat-lbl">Repos with explicit AI signal</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--exemplary)">${DATA.filter(d=>d.s6===3).length}/18</div><div class="stat-lbl">S6 Exemplary</div></div>
+    <div class="stat"><div class="stat-val" style="color:var(--absent)">${DATA.filter(d=>d.s3===0).length}/18</div><div class="stat-lbl">Zero test files</div></div>
+  `;
+}
+
+// ─── heatmap ──────────────────────────────────────────────────────────────────
+function scoreCell(s) {
+  const cls = s===-1?'score-na':s===0?'score-absent':s===1?'score-emerging':s===2?'score-proficient':'score-exemplary';
+  const lbl = s===-1?'N/A':s;
+  return `<span class="score-cell ${cls}">${lbl}</span>`;
+}
+function renderHeatmap() {
+  const sorted = [...DATA].sort((a,b) => {
+    const av = a[sortField] ?? 0, bv = b[sortField] ?? 0;
+    if (typeof av === 'string') return sortDir > 0 ? bv.localeCompare(av) : av.localeCompare(bv);
+    return sortDir > 0 ? bv - av : av - bv;
+  });
+  document.getElementById('htbody').innerHTML = sorted.map(d => `
+    <tr>
+      <td><strong>${d.id}</strong></td>
+      <td style="text-align:center">${scoreCell(d.s3)}</td>
+      <td style="text-align:center">${scoreCell(d.s6)}</td>
+      <td>
+        <div class="commits-bar">
+          <div class="bar-bg"><div class="bar-fg" style="width:${Math.round(d.commits/maxCommits*100)}%"></div></div>
+          <span style="font-size:12px;color:var(--muted)">${d.commits}</span>
+        </div>
+      </td>
+      <td style="font-size:12.5px"><span style="color:var(--proficient);font-weight:600">${d.test_files}</span> / <span style="color:var(--muted)">${d.impl_files}</span></td>
+      <td>
+        <span class="ai-badge ${AI_CLASS[d.ai_level]}">${d.ai_level}</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:4px">${d.ai_pct}%</span>
+      </td>
+      <td style="text-align:center;font-size:14px">${d.has_ci ? '✓' : '—'}</td>
+    </tr>
+  `).join('');
+}
+function sortBy(field) {
+  if (sortField === field) sortDir *= -1; else { sortField = field; sortDir = 1; }
+  renderHeatmap();
+}
+
+// ─── student detail ───────────────────────────────────────────────────────────
+function populateSelect() {
+  const sel = document.getElementById('repo-select');
+  [...DATA].sort((a,b)=>a.id.localeCompare(b.id)).forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id; opt.textContent = d.id;
+    sel.appendChild(opt);
+  });
+}
+function renderStudent() {
+  const id = document.getElementById('repo-select').value;
+  if (!id) { document.getElementById('student-content').style.display='none'; document.getElementById('student-empty').style.display='block'; return; }
+  document.getElementById('student-empty').style.display='none';
+  document.getElementById('student-content').style.display='block';
+  const d = DATA.find(r=>r.id===id);
+
+  // stat cards
+  document.getElementById('student-cards').innerHTML = `
+    <div class="stat-card"><div class="val" style="color:${d.s3>=0?['var(--absent)','var(--emerging)','var(--proficient)','var(--exemplary)'][d.s3]:'var(--na)'}">${d.s3>=0?SCORE_LABEL[d.s3]:'N/A'}</div><div class="lbl">S3 Verify</div></div>
+    <div class="stat-card"><div class="val" style="color:${d.s6>=0?['var(--absent)','var(--emerging)','var(--proficient)','var(--exemplary)'][d.s6]:'var(--na)'}">${d.s6>=0?SCORE_LABEL[d.s6]:'N/A'}</div><div class="lbl">S6 Orchestrate</div></div>
+    <div class="stat-card"><div class="val">${d.commits}</div><div class="lbl">Total Commits</div></div>
+    <div class="stat-card"><div class="val"><span class="ai-badge ${AI_CLASS[d.ai_level]}">${d.ai_level}</span></div><div class="lbl">AI Evidence</div></div>
+  `;
+
+  // radar
+  const scores = [d.s1,d.s2,d.s3,d.s4,d.s5,d.s6].map(v=>Math.max(v,0));
+  if (radarChart) radarChart.destroy();
+  const ctx = document.getElementById('radarChart').getContext('2d');
+  radarChart = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['S1 Direct','S2 Approve','S3 Verify','S4 Critique','S5 Own','S6 Orchestrate'],
+      datasets: [{
+        data: scores,
+        backgroundColor: 'rgba(49,130,206,0.18)',
+        borderColor: '#3182ce', borderWidth: 2,
+        pointBackgroundColor: scores.map((_,i)=>[d.s1,d.s2,d.s3,d.s4,d.s5,d.s6][i]<0?'#718096':'#3182ce'),
+        pointRadius: 5,
+      }]
+    },
+    options: {
+      scales: { r: { min:0, max:3, ticks:{stepSize:1,font:{size:10}}, pointLabels:{font:{size:11}} } },
+      plugins: { legend: { display:false } },
+      responsive: true, maintainAspectRatio: false,
+    }
+  });
+
+  // reasoning
+  document.getElementById('s3-reasoning').textContent = d.s3_reasoning || '—';
+  document.getElementById('s6-reasoning').textContent = d.s6_reasoning || '—';
+
+  // signals
+  const explicitMap = Object.fromEntries(d.ai_explicit.map(k=>[k,3]));
+  const allSigs = [...Object.keys(SIGNAL_NAMES)];
+  document.getElementById('signal-body').innerHTML = allSigs.map(k => {
+    const sc = explicitMap[k] || 0;
+    const pips = ''.padStart(3).split('').map((_,i)=>`<span class="pip ${i<sc?'pip-on':'pip-off'}"></span>`).join('');
+    const cat = k.startsWith('e')?'Explicit':k.startsWith('b')?'Behavioral':'Temporal';
+    return `<tr><td>${SIGNAL_NAMES[k]}</td><td>${pips}</td><td style="color:var(--muted);font-size:11px">${cat}</td></tr>`;
+  }).join('');
+}
+
+// ─── AI adoption charts ───────────────────────────────────────────────────────
+function buildScatter() {
+  const s6colors = { '-1':'#718096','0':'#e53e3e','1':'#dd6b20','2':'#2f855a','3':'#2b6cb0' };
+  // Fixed jitter seed using index so it's deterministic
+  const pts = DATA.filter(d=>d.s3>=0).map((d,i)=>({
+    x: d.ai_pct + (((i*37+13)%17)-8)*0.18,
+    y: d.s3     + (((i*11+7)%9)-4)*0.025,
+    label: d.id, s6: d.s6
+  }));
+
+  // Threshold line as a dataset (no annotation plugin needed)
+  const thresholdDataset = {
+    type: 'line',
+    label: 'Proficient threshold (S3=2)',
+    data: [{x:0,y:2},{x:56,y:2}],
+    borderColor: '#2f855a',
+    borderWidth: 1.5,
+    borderDash: [6,4],
+    pointRadius: 0,
+    fill: false,
+    order: 0,
+  };
+
+  if (scatterChart) scatterChart.destroy();
+  scatterChart = new Chart(document.getElementById('scatterChart').getContext('2d'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        thresholdDataset,
+        ...[3,2,1,0].map(s6v=>({
+          label: `S6 ${['Absent','Emerging','Proficient','Exemplary'][s6v]} (${s6v})`,
+          data: pts.filter(p=>p.s6===s6v),
+          backgroundColor: s6colors[s6v]+'cc',
+          borderColor: s6colors[s6v],
+          pointRadius: 7, pointHoverRadius: 9,
+          order: 1,
+        })).filter(ds=>ds.data.length>0)
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { title:{display:true,text:'AI adoption signal strength (%)',font:{size:11}}, min:0, max:56 },
+        y: { title:{display:true,text:'S3 Verify score',font:{size:11}}, min:-0.3, max:3.5,
+             ticks:{callback: v=>({0:'Absent',1:'Emerging',2:'Proficient',3:'Exemplary'}[v]??''), stepSize:1} }
+      },
+      plugins: {
+        legend: { position:'right', labels:{font:{size:10}, boxWidth:10,
+          filter: item => item.text !== 'Proficient threshold (S3=2)' } },
+        tooltip: { filter: item => item.dataset.type !== 'line',
+          callbacks: { label: ctx => `${ctx.raw.label}  S3=${Math.round(ctx.raw.y)}  AI=${ctx.raw.x.toFixed(1)}%` } }
+      }
+    }
+  });
+}
+function buildLevelChart() {
+  const counts = {'High':0,'Moderate':0,'Low':0,'Minimal':0};
+  DATA.forEach(d=>{ if(counts[d.ai_level]!==undefined) counts[d.ai_level]++; });
+  if (levelChart) levelChart.destroy();
+  levelChart = new Chart(document.getElementById('levelChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(counts),
+      datasets: [{
+        data: Object.values(counts),
+        backgroundColor: ['#6b46c1cc','#9f7aeacc','#d6bcfacc','#e9d8fdcc'],
+        borderColor:     ['#6b46c1','#9f7aea','#b794f4','#d6bcfa'],
+        borderWidth: 2, borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false} },
+      scales: {
+        y: { beginAtZero:true, max:12, ticks:{stepSize:2},
+             title:{display:true,text:'# Repositories',font:{size:11}} },
+        x: { title:{display:true,text:'AI Evidence Level',font:{size:11}} }
+      }
+    }
+  });
+}
+function renderAITable() {
+  const sorted = [...DATA].sort((a,b)=>aiSortDir*(a[aiSortField]>b[aiSortField]?1:a[aiSortField]<b[aiSortField]?-1:0));
+  document.getElementById('ai-body').innerHTML = sorted.map(d=>`
+    <tr>
+      <td><strong>${d.id}</strong></td>
+      <td>
+        <div class="commits-bar">
+          <div class="bar-bg"><div class="bar-fg" style="width:${Math.round(d.ai_pct/55*100)}%;background:var(--ai-high)"></div></div>
+          <span style="font-size:12px;color:var(--muted)">${d.ai_pct}%</span>
+        </div>
+      </td>
+      <td><span class="ai-badge ${AI_CLASS[d.ai_level]}">${d.ai_level}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${d.ai_explicit.map(k=>SIGNAL_NAMES[k]).join(', ')||'—'}</td>
+      <td style="text-align:center">${scoreCell(d.s3)}</td>
+      <td style="text-align:center">${scoreCell(d.s6)}</td>
+    </tr>
+  `).join('');
+}
+function sortAI(f) {
+  if (aiSortField===f) aiSortDir*=-1; else {aiSortField=f; aiSortDir=1;}
+  renderAITable();
+}
+
+// ─── tabs ─────────────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  if (name==='adoption' && !scatterChart) { buildScatter(); buildLevelChart(); }
+}
+
+// ─── init ─────────────────────────────────────────────────────────────────────
+buildStatBar();
+renderHeatmap();
+populateSelect();
+renderAITable();
+</script>
+</body>
+</html>
