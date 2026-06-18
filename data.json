@@ -1,6 +1,6 @@
 [
   {
-    "id": "arguably",
+    "id": "P01",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -26,7 +26,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "campus-stay",
+    "id": "P02",
     "s1": -1,
     "s2": -1,
     "s3": 1,
@@ -50,7 +50,7 @@
     "s6_has_prs": false
   },
   {
-    "id": "collabo",
+    "id": "P03",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -75,7 +75,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "csds393-devak",
+    "id": "P04",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -99,7 +99,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "csds393-hrishnugg",
+    "id": "P05",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -125,7 +125,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "csds393-project",
+    "id": "P06",
     "s1": -1,
     "s2": -1,
     "s3": 0,
@@ -149,7 +149,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "csds393-rhyderswen",
+    "id": "P07",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -174,7 +174,7 @@
     "s6_has_prs": false
   },
   {
-    "id": "dispatch",
+    "id": "P08",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -199,7 +199,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "get-space",
+    "id": "P09",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -221,7 +221,7 @@
     "s6_has_prs": false
   },
   {
-    "id": "group17-rest-api",
+    "id": "P10",
     "s1": -1,
     "s2": -1,
     "s3": 0,
@@ -246,7 +246,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "group6",
+    "id": "P11",
     "s1": -1,
     "s2": -1,
     "s3": 1,
@@ -270,7 +270,7 @@
     "s6_has_prs": false
   },
   {
-    "id": "packed",
+    "id": "P12",
     "s1": -1,
     "s2": -1,
     "s3": 0,
@@ -292,7 +292,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "party-server",
+    "id": "P13",
     "s1": -1,
     "s2": -1,
     "s3": 3,
@@ -317,7 +317,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "rate-my-housing",
+    "id": "P14",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -342,7 +342,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "six-degrees",
+    "id": "P15",
     "s1": -1,
     "s2": -1,
     "s3": 3,
@@ -366,7 +366,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "skillshare",
+    "id": "P16",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -388,7 +388,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "study-sync",
+    "id": "P17",
     "s1": -1,
     "s2": -1,
     "s3": 2,
@@ -410,7 +410,7 @@
     "s6_has_prs": true
   },
   {
-    "id": "web-to-table",
+    "id": "P18",
     "s1": -1,
     "s2": -1,
     "s3": 3,
